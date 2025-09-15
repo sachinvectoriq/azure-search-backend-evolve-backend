@@ -41,7 +41,9 @@ async def update_settings():
         'semantic_configuration_name': str,
         'openai_api_key': str,
         'user_name': str,
-        'login_session_id': str
+        'login_session_id': str,
+        'azure_search_index_name_french' : str,
+        'current_prompt_french' : str
     }
 
     for field, field_type in field_types.items():
@@ -70,7 +72,7 @@ async def update_settings():
         values = list(insert_fields.values())
 
         query = f"""
-            INSERT INTO azaisearch_ocm_settings2 ({columns})
+            INSERT INTO azaisearch_evolve_settings ({columns})
             VALUES ({placeholders})
             RETURNING update_id
         """
