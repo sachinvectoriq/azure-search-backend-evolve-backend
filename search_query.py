@@ -13,7 +13,102 @@ from azure.search.documents.models import VectorizableTextQuery
 from azure.identity.aio import DefaultAzureCredential as AsyncDefaultAzureCredential
 from openai import AsyncAzureOpenAI
 
+
+
+
 load_dotenv()
+
+
+# Async DB config
+DB_CONFIG = {
+    'user': os.getenv('DB_USER'),
+    'password': os.getenv('DB_PASSWORD'),
+    'database': os.getenv('DB_NAME'),
+    'host': os.getenv('DB_HOST'),
+    'port': os.getenv('DB_PORT')
+}
+
+async def connect_db():
+    try:
+        return await asyncpg.connect(**DB_CONFIG)
+    except Exception as e:
+        print(f"Database connection error: {e}")
+        return None
+
+
+
+
+
+async def load_fresh_config_from_db():
+    """Load fresh configuration values from database on every call"""
+    conn = None
+    try:
+        conn = await connect_db()
+        if conn is None:
+            print("Failed to connect to database for config loading")
+            return None
+            
+        # Query to get the latest configuration
+        query = """
+        SELECT * FROM azaisearch_evolve_settings 
+        WHERE update_id = (SELECT MAX(update_id) FROM azaisearch_evolve_settings)
+        """
+        
+        row = await conn.fetchrow(query)
+        
+        if row:
+            # Return configuration as dictionary instead of setting global variables
+            config = {
+                'azure_search_endpoint': row.get('azure_search_endpoint'),
+                'azure_search_index_name': row.get('azure_search_index_name'),
+                'current_prompt': row.get('current_prompt'),
+                'openai_model_deployment_name': row.get('openai_model_deployment_name'),
+                'openai_endpoint': row.get('openai_endpoint'),
+                'openai_api_version': row.get('openai_api_version'),
+                'openai_api_key': row.get('openai_api_key'),
+                'azure_search_index_name_french': row.get('azure_search_index_name_french'),
+                'current_prompt_french': row.get('current_prompt_french')
+            }
+            
+            # Convert Decimal to float for temperature
+            temp_value = row.get('openai_model_temperature')
+            config['openai_model_temperature'] = float(temp_value) if temp_value is not None else None
+
+            # DEBUG BOTH LANGUAGE CONFIGURATIONS
+            print("=== FRESH CONFIG LOADED ===")
+            print(f"azure_search_index_name: '{config['azure_search_index_name']}'")
+            print(f"current_prompt length: {len(config['current_prompt']) if config['current_prompt'] else 'None'}")
+            
+            print("=== FRENCH CONFIG ===")  
+            print(f"azure_search_index_name_french: '{config['azure_search_index_name_french']}'")
+            print(f"current_prompt_french length: {len(config['current_prompt_french']) if config['current_prompt_french'] else 'None'}")
+            
+            print("Fresh configuration loaded successfully from database")
+            return config
+        else:
+            print("No configuration found in database")
+            return None
+            
+    except Exception as e:
+        print(f"Error loading configuration from database: {e}")
+        return None
+    finally:
+        if conn:
+            await conn.close()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def safe_base64_decode(data):
     if data.startswith("https"):
         return data
@@ -41,34 +136,39 @@ def safe_base64_decode(data):
 # Async search and answer
 # -------------------------
 async def ask_query(user_query, user_id, conversation_store, clanguage="english"):
+
+
+
+
+
+        # Load fresh configuration on every API call
+    config = await load_fresh_config_from_db()
+    if config is None:
+        raise Exception("Failed to load configuration from database")
+
+
+
+
+
+
+
+
+
     # Async Azure credential
     credential = AsyncDefaultAzureCredential()
 
-    AZURE_SEARCH_SERVICE = "https://aiconciergeserach.search.windows.net"
-    deployment_name = "ocm-gpt-4o"
+    AZURE_SEARCH_SERVICE = config['azure_search_endpoint']
+
+    deployment_name = config['openai_model_deployment_name']
+
 
     # Language-based index and prompts
     if clanguage == "french_canadian":
-        index_name = "index-evolve-french-sep08"
-        answer_prompt_template = """Vous êtes un assistant IA parlant français canadien. Utilisez les extraits de sources les plus pertinents et informatifs ci-dessous pour répondre à la question de l’utilisateur.
 
-Directives :
-- Concentrez-vous principalement sur les extraits contenant la réponse la plus directe et complète.
-- N’extrayez que les informations factuelles présentes dans les extraits.
-- Chaque fait doit être immédiatement suivi de la citation entre crochets, par ex. [3].
-- N’ajoutez aucune information qui n’est pas explicitement présente dans les extraits sources.
-- Fournissez un résumé suivi de détails de soutien. Utilisez des **mots en gras** pour les titres et les termes importants.
+        index_name = config['azure_search_index_name_french']
+        answer_prompt_template = f"""{config['current_prompt_french']}"""
 
-Historique de la conversation :
-{conversation_history}
 
-Sources :
-{sources}
-
-Question de l’utilisateur : {query}
-
-Répondez avec :
-- Une réponse en français canadien, citant les sources entre crochets comme [1], [2], surtout là où la réponse est clairement soutenue."""  
         followup_prompt_template = """En vous basant uniquement sur les extraits suivants, générez 3 questions de suivi que l’utilisateur pourrait poser.
 N’utilisez que le contenu des sources. N’inventez pas de nouveaux faits.
 
@@ -83,26 +183,9 @@ SOURCES :
 - Toutes les questions doivent être formulées en français canadien.
 """  
     else:
-        index_name = "index-evolve-mo"
-        answer_prompt_template = """You are an AI assistant. Use the most relevant and informative source chunks below to answer the user's query.
+        index_name = config['azure_search_index_name']
+        answer_prompt_template = f"""{config['current_prompt']}"""
 
-Guidelines:
-- Focus your answer primarily on the chunk(s) that contain the most direct and complete answer.
-- Extract only factual information present in the chunks.
-- Each fact must be followed immediately by the citation in square brackets, e.g., [3].
-- Do not add any information not explicitly present in the source chunks.
-- Provide a summary followed by supporting details. Use **bold words** for titles and important words.
-
-Conversation History:
-{conversation_history}
-
-Sources:
-{sources}
-
-User Question: {query}
-
-Respond with:
-- An answer citing sources inline like [1], [2], especially where the answer is clearly supported."""  
         followup_prompt_template = """Based only on the following chunks of source material, generate 3 follow-up questions the user might ask.
 Only use the content in the sources. Do not invent new facts.
 
@@ -115,9 +198,12 @@ SOURCES:
 {citations}"""  
 
     openai_client = AsyncAzureOpenAI(
-        api_version="2025-01-01-preview",
-        azure_endpoint="https://ai-hubdevaiocm273154123411.cognitiveservices.azure.com/",
-        api_key="1inOabIDqV45oV8EyGXA4qGFqN3Ip42pqA5Qd9TAbJFgUdmTBQUPJQQJ99BCACHYHv6XJ3w3AAAAACOGuszT"
+        api_version=config['openai_api_version'],
+
+        azure_endpoint=config['openai_endpoint'],
+
+        api_key=config['openai_api_key']
+
     )
 
     search_client = AsyncSearchClient(
@@ -186,8 +272,10 @@ SOURCES:
 
     response = await openai_client.chat.completions.create(
         messages=[{"role": "user", "content": prompt}],
-        model=deployment_name,
-        temperature=0.7
+        model=config['openai_model_deployment_name'],
+        # temperature=0.7
+        temperature= config['openai_model_temperature']
+
     )
     full_reply = response.choices[0].message.content.strip()
 
@@ -228,6 +316,18 @@ SOURCES:
         model=deployment_name
     )
     follow_ups_raw = follow_up_resp.choices[0].message.content.strip()
+
+
+        # Add this before the return statement
+    print(f"=== FINAL DEBUG INFO ===")
+    print(f"Using config azure_search_endpoint: {config['azure_search_endpoint']}")
+    print(f"Using config openai_endpoint: {config['openai_endpoint']}")
+    print(f"Using index_name: {index_name}")
+    
+    # Cleanup clients
+    await search_client.close()
+    await openai_client.close()
+    await credential.close()
 
     return {"query": user_query, "ai_response": ai_response, "citations": citations, "follow_ups": follow_ups_raw}
 
