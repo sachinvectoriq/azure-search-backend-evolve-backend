@@ -12,8 +12,8 @@ user_conversations = {}  # Define the single source of truth here
 
 # Initialize Quart app
 app = Quart(__name__)
-#app.config["SAML_PATH"] = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saml")
-#app.config["SECRET_KEY"] = os.getenv('JWT_SECRET_KEY')  # Replace with hardcoded key or securely read it, as you prefer.
+app.config["SAML_PATH"] = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saml")
+app.config["SECRET_KEY"] = os.getenv('JWT_SECRET_KEY')  # Replace with hardcoded key or securely read it, as you prefer.
 
 # ---- Basic route ----
 @app.route('/')
@@ -21,17 +21,17 @@ async def hello():
     return 'Hello!'
 
 # ---- SAML routes ----
-#@app.route('/saml/login')
-#async def login(): # Changed to async def
-    #return await saml_login(app.config["SAML_PATH"]) # Added await
+@app.route('/saml/login')
+async def login(): # Changed to async def
+    return await saml_login(app.config["SAML_PATH"]) # Added await
 
-#@app.route('/saml/callback', methods=['POST'])
-#async def login_callback(): # Changed to async def
-    #return await saml_callback(app.config["SAML_PATH"]) # Added await
+@app.route('/saml/callback', methods=['POST'])
+async def login_callback(): # Changed to async def
+    return await saml_callback(app.config["SAML_PATH"]) # Added await
 
-#@app.route('/saml/token/extract', methods=['POST'])
-#async def func_get_data_from_token(): # Changed to async def
-    #return await extract_token() # Added await
+@app.route('/saml/token/extract', methods=['POST'])
+async def func_get_data_from_token(): # Changed to async def
+    return await extract_token() # Added await
 
 # ---- Async ask route ----
 @app.route("/ask", methods=["POST"])
