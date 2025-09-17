@@ -67,7 +67,9 @@ async def load_fresh_config_from_db():
                 'openai_api_version': row.get('openai_api_version'),
                 'openai_api_key': row.get('openai_api_key'),
                 'azure_search_index_name_french': row.get('azure_search_index_name_french'),
-                'current_prompt_french': row.get('current_prompt_french')
+                'current_prompt_french': row.get('current_prompt_french'),
+                'semantic_configuration_name_english': row.get('semantic_configuration_name_english'),
+                'semantic_configuration_name_french': row.get('semantic_configuration_name_french')
             }
             
             # Convert Decimal to float for temperature
@@ -166,6 +168,7 @@ async def ask_query(user_query, user_id, conversation_store, clanguage="english"
     if clanguage == "french_canadian":
 
         index_name = config['azure_search_index_name_french']
+        semantic_config_name = config.get('semantic_configuration_name_french')
         answer_prompt_template = f"""{config['current_prompt_french']}"""
 
 
@@ -184,6 +187,7 @@ SOURCES :
 """  
     else:
         index_name = config['azure_search_index_name']
+        semantic_config_name = config.get('semantic_configuration_name_english')
         answer_prompt_template = f"""{config['current_prompt']}"""
 
         followup_prompt_template = """Based only on the following chunks of source material, generate 3 follow-up questions the user might ask.
@@ -237,7 +241,8 @@ SOURCES:
             vector_queries=[vector_query],
             select=["title", "chunk", "parent_id"],
             top=k_value,
-            semantic_configuration_name=f"{index_name}-semantic-configuration",
+            # semantic_configuration_name=f"{index_name}-semantic-configuration",
+            semantic_configuration_name=semantic_config_name,
             query_type="semantic"
         )
         chunks, sources = [], []
@@ -330,6 +335,7 @@ SOURCES:
     await credential.close()
 
     return {"query": user_query, "ai_response": ai_response, "citations": citations, "follow_ups": follow_ups_raw}
+
 
 
 
