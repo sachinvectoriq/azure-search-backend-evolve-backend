@@ -91,7 +91,7 @@ async def saml_callback(saml_path):
         user_data = {
             'name': json_data.get('http://schemas.microsoft.com/identity/claims/displayname'),
             'group': group_name,
-            'job_title': json_data.get('http://schemas.xmlsoap.org/ws/2005/05/identity/claims/jobtitle')
+            'job_title': json_data.get('http://schemas.xmlsoap.org/ws/2005/05/identity/claims/userjobtitle')
         }
 
         await asyncio.to_thread(
