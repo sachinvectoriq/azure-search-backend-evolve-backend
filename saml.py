@@ -83,15 +83,19 @@ async def saml_callback(saml_path):
         session['samlNameId'] = name_id_from_saml
 
         json_data = session.get('samlUserdata', {})
+
+        # Safely unwrap values
         groups = json_data.get("http://schemas.microsoft.com/ws/2008/06/identity/claims/groups", [])
+        displayname = json_data.get("http://schemas.microsoft.com/identity/claims/displayname", [""])
+        job_title = json_data.get("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/userjobtitle", [""])
 
         if admin_group_id and admin_group_id in groups:
             group_name = 'admin'
 
         user_data = {
-            'name': json_data.get('http://schemas.microsoft.com/identity/claims/displayname'),
+            'name': displayname[0] if displayname else None,
             'group': group_name,
-            'job_title': json_data.get('http://schemas.xmlsoap.org/ws/2005/05/identity/claims/userjobtitle')
+            'job_title': job_title[0] if job_title else None
         }
 
         await asyncio.to_thread(
